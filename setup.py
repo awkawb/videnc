@@ -6,7 +6,7 @@ with open('README.md') as fh:
 
 setuptools.setup(
     name='videnc',
-    version='0.0.1',
+    version='0.0.1.post2',
     author='Andrew Bryant',
     author_email='abryant288@gmail.com',
     description='A FFMpeg wrapper written in python.',
