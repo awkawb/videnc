@@ -2,40 +2,45 @@ import av
 import os
 import subprocess
 
-from av import AVError
 from typing import List
+
+from av import AVError
+import ffpb
 
 class Video:
     def __init__(self, path: str, audio_streams: List[int] = None,
             output_path: str = None, compress: bool = False, 
-            preset: str = 'medium',  quality: int = 25):
+            preset: str = 'medium',  quality: int = 25,
+            video_width: int = None, video_height: int = None,
+            deint: bool = False, deint_filter: str = 'yadif'):
         self.video_container = av.open(path)
         self.audio_layouts = self._get_audio_layouts()
-        self.video_height = self._get_video_height()
 
         # TODO if not compressing video print video info?
 
         if compress and output_path:
             ffmpeg_cl = self._get_ffmpeg_cl(path, output_path, audio_streams,
-                preset, quality)
+                preset, quality, video_width, video_height, deint, deint_filter)
             print(ffmpeg_cl)
-            subprocess.call(ffmpeg_cl)
+            ffpb.main(ffmpeg_cl)
 
     def _get_ffmpeg_cl(self, path: str, output_path: str,
             audio_streams: List[int] = None, preset: str = 'medium',
-            quality: int = 25) -> List[str]:
+            quality: int = 25, video_width: int = None,
+            video_height: int = None,deint: bool = False,
+            deint_filter: str = 'yadif') -> List[str]:
         video_name, video_ext = os.path.splitext(os.path.basename(path))
         metadata_notitle = ['-metadata:s:v:0', 'title=' + video_name,
-            '-metadata:s:a:0', 'title=' + video_name,
             '-metadata', 'title=' + video_name]
 
         # don't change ffmpeg cl method order without checking dependencies
-        return ['ffmpeg', '-i', path] \
+        return ['-i', path] \
             + ['-map', '0:v:0'] \
             + self._get_ffmpeg_audio_stream_options(audio_streams) \
             + self._get_ffmpeg_audio_filter_options() \
             + self._get_ffmpeg_audio_bitrate_options() \
-            + self._get_ffmpeg_video_options(preset, quality) \
+            + self._get_ffmpeg_video_options(preset, quality, video_width,
+                video_height) \
             + self._get_ffmpeg_color_depth_options() \
             + self._get_ffmpeg_subtitle_options() \
             + metadata_notitle \
@@ -174,20 +179,21 @@ class Video:
                 return codec + bitrate_1ch
 
 
-    def _get_ffmpeg_video_options(self, preset, quality) -> List[str]:
-        video_sd = ['-preset', preset, '-crf', str(quality), '-c:v', 'libx265']
-        video_hd = ['-preset', preset, '-crf', str(quality), '-c:v', 'libx265']
+    def _get_ffmpeg_video_options(self, preset: str, quality: int,
+            video_width: int = None, video_height: int = None,
+            deint: bool = False, deint_filter: str = 'yadif') -> List[str]:
+        """ Return ffmpeg video encoding options """
+
+        video_options = ['-preset', preset, '-crf', str(quality), '-c:v', 'libx265']
+
+        if video_width and video_height:
+            video_options += ['-vf', 'scale={}:{}'.format(video_width, video_height)]
+
+        if deint:
+            video_options += ['-vf', deint_filter]
+
+        return video_options
     
-        if self.video_height >= 720:
-            return video_hd
-        else:
-            return video_sd
-
-
-    def _get_video_height(self) -> int:
-        for frame in self.video_container.decode(video=0):
-            return frame.height
-
     def _get_audio_channels(self, stream: int) -> str:
         for frame in self.video_container.decode(audio=stream):
             return frame.layout.name
